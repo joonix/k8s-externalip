@@ -17,10 +17,12 @@ import (
 
 var errNotFound = errors.New("not found")
 
-func externalIP(c *kubernetes.Clientset) (string, error) {
-	name, err := os.Hostname()
-	if err != nil {
-		return "", err
+func externalIP(c *kubernetes.Clientset, name string) (string, error) {
+	if name == "" {
+		var err error
+		if name, err = os.Hostname(); err != nil {
+			return "", err
+		}
 	}
 
 	node, err := c.CoreV1().Nodes().Get(name, metav1.GetOptions{})
@@ -52,11 +54,16 @@ func updateConfig(c *kubernetes.Clientset, namespace, configmap, filename, place
 }
 
 func main() {
-	namespace := flag.String("namespace", "default", "Which namespace to look for configmap in")
+	namespace := flag.String("namespace", os.ExpandEnv("$NAMESPACE"), "Which namespace to look for configmap in")
+	nodename := flag.String("nodename", os.ExpandEnv("$NODENAME"), "Which node name to lookup external ip for.")
 	configmap := flag.String("configmap", "", "Which config map to read config from")
 	filename := flag.String("filename", "", "The file name to write config to")
 	placeholder := flag.String("placeholder", "K8S_EXTERNALADDRESS", "What string to search and replace from config")
 	flag.Parse()
+
+	if *namespace == "" {
+		*namespace = "default"
+	}
 
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
@@ -68,7 +75,7 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	ip, err := externalIP(clientset)
+	ip, err := externalIP(clientset, *nodename)
 	if err != nil {
 		panic(err.Error())
 	}
