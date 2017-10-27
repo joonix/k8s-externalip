@@ -30,12 +30,28 @@ func externalIP(c *kubernetes.Clientset, name string) (string, error) {
 		return "", err
 	}
 
+	found := ""
+	// Attempt to find IP from addresses marked as external.
 	for _, addr := range node.Status.Addresses {
 		if addr.Type == v1.NodeExternalIP {
-			return addr.Address, nil
+			found = addr.Address
+			break
 		}
 	}
-	return "", errNotFound
+	// Look at annotations if external IP can't be found.
+	if found == "" {
+		for key, value := range node.Annotations {
+			if strings.HasSuffix(key, ".kubernetes.io/provided-node-ip") {
+				found = value
+			}
+		}
+	}
+
+	if found == "" {
+		return "", errNotFound
+	}
+
+	return found, nil
 }
 
 func updateConfig(c *kubernetes.Clientset, namespace, configmap, filename, placeholder, ip string) error {
